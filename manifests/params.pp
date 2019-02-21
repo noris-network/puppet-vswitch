@@ -17,6 +17,7 @@ class vswitch::params {
       $ovs_dpdk_package_name = 'openvswitch'
       $ovs_dkms_package_name = undef
       $ovs_service_name      = 'openvswitch'
+      $ovsdb_service_name    = undef
       $ovs_service_hasstatus = undef
       $ovs_status            = undef
       $provider              = 'ovs_redhat'
@@ -26,6 +27,7 @@ class vswitch::params {
       $ovs_dpdk_package_name = 'openvswitch-switch-dpdk'
       $ovs_dkms_package_name = 'openvswitch-datapath-dkms'
       $ovs_service_name      = 'openvswitch-switch'
+      $ovsdb_service_name    = undef
       $provider              = 'ovs'
       case $::operatingsystem {
         'ubuntu': {
@@ -45,6 +47,7 @@ class vswitch::params {
             $ovs_status            = '/etc/init.d/openvswitch-switch status | fgrep -q "not running"; if [ $? -eq 0 ]; then exit 1; else exit 0; fi' # lint:ignore:140chars
           } else {
             $ovs_service_hasstatus = true
+            $ovs_status            = undef
           }
         }
         default: {

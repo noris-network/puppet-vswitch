@@ -34,15 +34,6 @@
 #   socket 1 and no allocation for socket 0, the value should be "0,1024"
 #   Defaults to undef.
 #
-# DEPRECATED PARAMETERS
-#
-# [*core_list*]
-#   (optional) Deprecated.
-#   The list of cores to be used by the DPDK Poll Mode Driver
-#   The core_list is a string with format as <c1>[-c2][,c3[-c4],...] where c1, c2, etc are core indexes between 0 and 128
-#   For example, to configure 3 cores the value should be "0-2"
-#   Defaults to undef.
-#
 class vswitch::dpdk (
   $memory_channels    = undef,
   $driver_type        = 'vfio-pci',
@@ -50,8 +41,6 @@ class vswitch::dpdk (
   $package_ensure     = 'present',
   $pmd_core_list      = undef,
   $socket_mem         = undef,
-  # DEPRECATED PARAMETERS
-  $core_list          = undef,
 ) {
 
   include ::vswitch::params
@@ -71,13 +60,16 @@ class vswitch::dpdk (
   # DPDK_OPTIONS is no longer used in ovs 2.6, since it was a distribution
   # specific hack to the ovs-ctl scripts. Instead dpdk information is
   # pulled from the ovsdb.
-  if ($socket_mem and !empty($socket_mem)) {
+  if $socket_mem and !empty($socket_mem) {
+    unless $socket_mem =~ /^(\d+\,?)+$/ {
+      fail( 'socket_mem is in incorrect format')
+    }
     $socket_string = "--socket-mem ${socket_mem}"
   }
   else {
     $socket_string = undef
   }
-  if ($driver_type and !empty($driver_type)) {
+  if $driver_type {
     $pci_list = inline_template('<%= Facter.value("pci_address_driver_#@driver_type") %>')
     if empty($pci_list) {
       $white_list = undef
@@ -86,19 +78,7 @@ class vswitch::dpdk (
       $white_list = inline_template('-w <%= @pci_list.gsub(",", " -w ") %>')
     }
   }
-  if ($host_core_list and !empty($host_core_list)) {
-    $core_list_string = $host_core_list
-  }
-  elsif ($core_list and !empty($core_list)) {
-    warning('core_list is deprecated, will be used when host_core_list is not defined and will be removed in a future release.')
-    $core_list_string = $core_list
-  }
-  else {
-    fail('host_core_list must be set for ovs agent when DPDK is enabled')
-  }
-
-  $options = "DPDK_OPTIONS = \"-l ${core_list_string} -n ${memory_channels} ${socket_string} ${white_list}\""
-
+  $options = "DPDK_OPTIONS = \"-l ${host_core_list} -n ${memory_channels} ${socket_string} ${white_list}\""
   file_line { '/etc/sysconfig/openvswitch':
     path    => '/etc/sysconfig/openvswitch',
     match   => '^DPDK_OPTIONS.*',
@@ -107,24 +87,10 @@ class vswitch::dpdk (
     before  => Service['openvswitch'],
   }
 
-  if ($pmd_core_list and !empty($pmd_core_list)) {
-    $pmd_core_list_updated = inline_template('<%= @pmd_core_list.split(",").map{|c| c.include?("-")?(c.split("-").map(&:to_i)[0]..c.split("-").map(&:to_i)[1]).to_a.join(","):c}.join(",") %>')
-    $pmd_core_mask = inline_template('<%= @pmd_core_list_updated.split(",").map{|c| 1<<c.to_i}.inject(0,:|).to_s(16)  %>')
-  }
-  else {
-    $pmd_core_mask = undef
-  }
+  $pmd_core_mask = range_to_mask($pmd_core_list)
+  $dpdk_lcore_mask = range_to_mask($host_core_list)
 
-
-  if ($core_list_string and !empty($core_list_string)) {
-    $host_core_list_updated = inline_template('<%= @core_list_string.split(",").map{|c| c.include?("-")?(c.split("-").map(&:to_i)[0]..c.split("-").map(&:to_i)[1]).to_a.join(","):c}.join(",") %>')
-    $dpdk_lcore_mask = inline_template('<%= @host_core_list_updated.split(",").map{|c| 1<<c.to_i}.inject(0,:|).to_s(16)  %>')
-  }
-  else {
-    $dpdk_lcore_mask = undef
-  }
-
-  if ($memory_channels and !empty($memory_channels)) {
+  if $memory_channels and !empty($memory_channels) {
     $memory_channels_conf = "-n ${memory_channels}"
   }
   else {
@@ -133,7 +99,6 @@ class vswitch::dpdk (
 
   $dpdk_configs = {
     'other_config:dpdk-extra'      => { value => $memory_channels_conf, skip_if_version => '2.5'},
-    'other_config:dpdk-init'       => { value => 'true', skip_if_version => '2.5'},
     'other_config:dpdk-socket-mem' => { value => $socket_mem, skip_if_version => '2.5'},
     'other_config:dpdk-lcore-mask' => { value => $dpdk_lcore_mask, skip_if_version => '2.5'},
     'other_config:pmd-cpu-mask'    => { value => $pmd_core_mask},
@@ -142,6 +107,14 @@ class vswitch::dpdk (
   $dpdk_dependencies = {
     wait    => false,
     require => Service['openvswitch'],
+    notify  => Vs_config['other_config:dpdk-init'],
+  }
+
+  vs_config { 'other_config:dpdk-init':
+    value           => 'true',
+    skip_if_version => '2.5',
+    require         => Service['openvswitch'],
+    wait            => true,
   }
 
   service { 'openvswitch':
@@ -151,6 +124,4 @@ class vswitch::dpdk (
   }
 
   create_resources ('vs_config', $dpdk_configs, $dpdk_dependencies)
-
 }
-

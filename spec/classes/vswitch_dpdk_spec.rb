@@ -1,17 +1,17 @@
 require 'spec_helper'
 
 describe 'vswitch::dpdk' do
-  let :default_params do
-    {
-      :package_ensure   => 'present',
-    }
+
+  let :default_params do {
+    :package_ensure   => 'present',
+  }
   end
 
   shared_examples_for 'vswitch::dpdk on Debian' do
     let(:params) { default_params }
     context 'basic parameters' do
       before :each do
-        params.merge!(:core_list => '1,2')
+        params.merge!(:host_core_list => '1,2')
       end
 
       it_raises 'a Puppet::Error', /Debian not yet supported for dpdk/
@@ -20,14 +20,7 @@ describe 'vswitch::dpdk' do
 
   shared_examples_for 'vswitch::dpdk on RedHat' do
     let(:params) { default_params }
-    context 'should raise error when not passing either host_core_list or core_list' do
-      it_raises 'a Puppet::Error', /host_core_list must be set for ovs agent when DPDK is enabled/
-    end
-
-    context 'with basic parameters, shall  write DPDK_OPTIONS' do
-      before :each do
-        params.merge!(:core_list => '1,2')
-      end
+    context 'shall  write DPDK_OPTIONS as well as ovsdb params' do
       it 'include the class' do
         is_expected.to contain_class('vswitch::dpdk')
       end
@@ -55,11 +48,11 @@ describe 'vswitch::dpdk' do
       it 'should have dpdk driver modules file' do
         is_expected.to contain_kmod__load('vfio-pci')
       end
-      it 'configures dpdk options and ovsdb' do
+      it 'configures dpdk options with socket memory' do
         is_expected.to contain_file_line('/etc/sysconfig/openvswitch')
 
         is_expected.to contain_vs_config('other_config:dpdk-init').with(
-          :value  => 'true', :wait => false, :skip_if_version => "2.5",
+          :value  => 'true', :wait => true, :skip_if_version => "2.5",
         )
         is_expected.to contain_vs_config('other_config:pmd-cpu-mask').with(
           :value  => nil, :wait => false,
@@ -68,11 +61,43 @@ describe 'vswitch::dpdk' do
           :value => nil, :wait => false, :skip_if_version => "2.5",
         )
         is_expected.to contain_vs_config('other_config:dpdk-lcore-mask').with(
-          :value => '6', :wait => false, :skip_if_version => "2.5",
+          :value => nil, :wait => false, :skip_if_version => "2.5",
         )
         is_expected.to contain_vs_config('other_config:dpdk-extra').with(
           :value => nil, :wait => false, :skip_if_version => "2.5",
         )
+      end
+    end
+
+    context 'when passing all empty params' do
+      before :each do
+        params.merge!(:host_core_list  => '')
+        params.merge!(:socket_mem      => '')
+        params.merge!(:memory_channels => '' )
+        params.merge!(:pmd_core_list => '')
+      end
+      it 'configures dpdk options' do
+        is_expected.to contain_file_line('/etc/sysconfig/openvswitch').with(
+          :path   => '/etc/sysconfig/openvswitch',
+          :match  => '^DPDK_OPTIONS.*',
+          :before => 'Service[openvswitch]',
+        )
+        is_expected.to contain_vs_config('other_config:dpdk-init').with(
+          :value  => 'true', :wait => true, :skip_if_version => "2.5",
+        )
+        is_expected.to contain_vs_config('other_config:pmd-cpu-mask').with(
+          :value  => nil, :wait => false,
+        )
+        is_expected.to contain_vs_config('other_config:dpdk-socket-mem').with(
+          :value => '', :wait => false, :skip_if_version => "2.5",
+        )
+        is_expected.to contain_vs_config('other_config:dpdk-lcore-mask').with(
+          :value => nil, :wait => false, :skip_if_version => "2.5",
+        )
+        is_expected.to contain_vs_config('other_config:dpdk-extra').with(
+          :value => nil, :wait => false, :skip_if_version => "2.5",
+        )
+
       end
     end
 
@@ -91,7 +116,7 @@ describe 'vswitch::dpdk' do
           :before => 'Service[openvswitch]',
         )
         is_expected.to contain_vs_config('other_config:dpdk-init').with(
-          :value  => 'true', :wait => false, :skip_if_version => "2.5",
+          :value  => 'true', :wait => true, :skip_if_version => "2.5",
         )
         is_expected.to contain_vs_config('other_config:pmd-cpu-mask').with(
           :value  => '3c0000000003c00000', :wait => false,
@@ -106,6 +131,13 @@ describe 'vswitch::dpdk' do
           :value => '-n 2', :wait => false, :skip_if_version => "2.5",
         )
       end
+    end
+
+    context 'when passing invalid socket_mem' do
+      before :each do
+        params.merge!(:socket_mem      => "'1024'")
+      end
+      it { is_expected.to raise_error(Puppet::Error, /socket_mem is in incorrect format/) }
     end
 
     context 'when providing valid driver type facts' do
@@ -131,7 +163,7 @@ describe 'vswitch::dpdk' do
           :before => 'Service[openvswitch]',
         )
         is_expected.to contain_vs_config('other_config:dpdk-init').with(
-          :value  => 'true', :wait => false, :skip_if_version => "2.5",
+          :value  => 'true', :wait => true, :skip_if_version => "2.5",
         )
         is_expected.to contain_vs_config('other_config:pmd-cpu-mask').with(
           :value  => nil, :wait => false,
