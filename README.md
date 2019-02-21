@@ -1,7 +1,7 @@
 Team and repository tags
 ========================
 
-[![Team and repository tags](http://governance.openstack.org/badges/puppet-vswitch.svg)](http://governance.openstack.org/reference/tags/index.html)
+[![Team and repository tags](https://governance.openstack.org/tc/badges/puppet-vswitch.svg)](https://governance.openstack.org/tc/reference/tags/index.html)
 
 <!-- Change things from this point on -->
 
@@ -76,10 +76,10 @@ This module has beaker-rspec tests
 
 To run:
 
-``shell
+```shell
 bundle install
 bundle exec rspec spec/acceptance
-``
+```
 
 ## TODO:
 * OpenFlow controller settings

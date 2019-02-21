@@ -2,4 +2,8 @@
 host=review.openstack.org
 port=29418
 project=openstack/puppet-vswitch.git
+<<<<<<< HEAD
 defaultbranch=stable/pike
+=======
+defaultbranch=stable/queens
+>>>>>>> upstream/stable/queens
